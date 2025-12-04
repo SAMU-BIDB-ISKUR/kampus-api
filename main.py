@@ -1,12 +1,8 @@
 # main.py - Tek Dosyada Kampüs ve Bina Yönetimi API
 from fastapi import FastAPI, HTTPException, status, Depends, Query
-from contextlib import asynccontextmanager
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
 from datetime import datetime
-import psycopg2
-from psycopg2.extras import RealDictCursor
-from psycopg2.pool import SimpleConnectionPool
 import os
 
 
