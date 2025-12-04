@@ -1,0 +1,41 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+ 
+# Virtual environments
+.env
+.venv
+venv/
+env/
+ 
+# Logs
+*.log
+logs/
+ 
+# Database files
+*.db
+*.sqlite
+ 
+# IDE files
+.vscode/
+.idea/
+ 
+# OS files
+.DS_Store
+Thumbs.db
+ 
+# Upload directories
+static/uploads/*
+!static/uploads/.gitkeep
+ 
+# Distribution
+build/
+dist/
+*.egg-info/
+ 
+.claude/
+ 
+# Docker
+dockerfile
+docker-compose.yml
