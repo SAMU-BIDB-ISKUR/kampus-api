@@ -1,7 +1,7 @@
 # repository.py
 from typing import Optional, List
 from sqlmodel import Session, select
-from models import Campus  # ← models.py'den import ediyoruz
+from app.campus.models.campus import Campus
 
 class CampusRepository:
     def __init__(self, session: Session):  # ← conn yerine session
@@ -60,3 +60,4 @@ class CampusRepository:
         except Exception as e:
             self.session.rollback()
             raise Exception(f"Veritabanı silme hatası: {str(e)}")
+
