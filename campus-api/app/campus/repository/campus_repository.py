@@ -1,56 +1,84 @@
-# --- Kampüs Modelleri ---
-class CampusCreateDTO(BaseModel):
-    name: str = Field(..., min_length=1, max_length=255, description="Kampüs adı")
-    city: str = Field(..., min_length=1, max_length=100, description="Şehir")
-    address: Optional[str] = Field(None, description="Adres")
-    established_year: Optional[int] = Field(None, ge=1000, le=2100, description="Kuruluş yılı")
-    total_area: Optional[float] = Field(None, ge=0, description="Toplam alan (m²)")
-    student_capacity: Optional[int] = Field(None, ge=0, description="Öğrenci kapasitesi")
+# ==================== REPOSITORY KATMANI (Veri Erişimi) ====================
 
-class CampusUpdateDTO(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    city: Optional[str] = Field(None, min_length=1, max_length=100)
-    address: Optional[str] = None
-    established_year: Optional[int] = Field(None, ge=1000, le=2100)
-    total_area: Optional[float] = Field(None, ge=0)
-    student_capacity: Optional[int] = Field(None, ge=0)
-
-class CampusResponseDTO(BaseModel):
-    id: int
-    name: str
-    city: str
-    address: Optional[str]
-    established_year: Optional[int]
-    total_area: Optional[float]
-    student_capacity: Optional[int]
-    created_at: datetime
-    updated_at: datetime
-    model_config = ConfigDict(from_attributes=True)
-
-# --- Bina Modelleri ---
-class BuildingCreateDTO(BaseModel):
-    campus_id: int = Field(..., description="Binanın ait olduğu kampüs ID'si")
-    name: str = Field(..., min_length=1, max_length=255, description="Bina Adı")
-    type: Optional[str] = Field(None, max_length=50, description="Bina Tipi (Derslik, Kütüphane vb.)")
-    floor_count: Optional[int] = Field(None, ge=1, description="Kat Sayısı")
-    construction_year: Optional[int] = Field(None, ge=1000, le=2100, description="İnşaat Yılı")
-    gross_area: Optional[float] = Field(None, ge=0, description="Brüt Alan (m²)")
-
-class BuildingUpdateDTO(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    type: Optional[str] = Field(None, max_length=50)
-    floor_count: Optional[int] = Field(None, ge=1)
-    construction_year: Optional[int] = Field(None, ge=1000, le=2100)
-    gross_area: Optional[float] = Field(None, ge=0)
-
-class BuildingResponseDTO(BaseModel):
-    id: int
-    campus_id: int
-    name: str
-    type: Optional[str]
-    floor_count: Optional[int]
-    construction_year: Optional[int]
-    gross_area: Optional[float]
-    created_at: datetime
-    updated_at: datetime
-    model_config = ConfigDict(from_attributes=True)
+class CampusRepository:
+    def __init__(self, conn):
+        self.conn = conn
+    
+    def create(self, campus_data: dict) -> dict:
+        cur = self.conn.cursor()
+        try:
+            query = """
+            INSERT INTO campuses (name, city, address, established_year, total_area, student_capacity)
+            VALUES (%(name)s, %(city)s, %(address)s, %(established_year)s, %(total_area)s, %(student_capacity)s)
+            RETURNING *;
+            """
+            cur.execute(query, campus_data)
+            campus = cur.fetchone()
+            self.conn.commit()
+            return dict(campus)
+        except Exception as e:
+            self.conn.rollback()
+            raise Exception(f"Veritabanı oluşturma hatası: {str(e)}")
+        finally:
+            cur.close()
+    
+    def find_all(self, city: Optional[str] = None) -> List[dict]:
+        cur = self.conn.cursor()
+        try:
+            if city:
+                query = 'SELECT * FROM campuses WHERE city ILIKE %s ORDER BY id'
+                cur.execute(query, (f'%{city}%',))
+            else:
+                cur.execute('SELECT * FROM campuses ORDER BY id')
+            
+            campuses = cur.fetchall()
+            return [dict(campus) for campus in campuses]
+        except Exception as e:
+            raise Exception(f"Veritabanı listeleme hatası: {str(e)}")
+        finally:
+            cur.close()
+    
+    def find_by_id(self, campus_id: int) -> Optional[dict]:
+        cur = self.conn.cursor()
+        try:
+            cur.execute('SELECT * FROM campuses WHERE id = %s', (campus_id,))
+            campus = cur.fetchone()
+            return dict(campus) if campus else None
+        except Exception as e:
+            raise Exception(f"Veritabanı getirme hatası: {str(e)}")
+        finally:
+            cur.close()
+    
+    def update(self, campus_id: int, campus_data: dict) -> Optional[dict]:
+        cur = self.conn.cursor()
+        try:
+            set_clause = ", ".join([f"{key} = %({key})s" for key in campus_data.keys()])
+            query = f"""
+            UPDATE campuses 
+            SET {set_clause}, updated_at = CURRENT_TIMESTAMP
+            WHERE id = %(id)s
+            RETURNING *;
+            """
+            campus_data['id'] = campus_id
+            cur.execute(query, campus_data)
+            campus = cur.fetchone()
+            self.conn.commit()
+            return dict(campus) if campus else None
+        except Exception as e:
+            self.conn.rollback()
+            raise Exception(f"Veritabanı güncelleme hatası: {str(e)}")
+        finally:
+            cur.close()
+    
+    def delete(self, campus_id: int) -> Optional[dict]:
+        cur = self.conn.cursor()
+        try:
+            cur.execute('DELETE FROM campuses WHERE id = %s RETURNING *', (campus_id,))
+            campus = cur.fetchone()
+            self.conn.commit()
+            return dict(campus) if campus else None
+        except Exception as e:
+            self.conn.rollback()
+            raise Exception(f"Veritabanı silme hatası: {str(e)}")
+        finally:
+            cur.close()
