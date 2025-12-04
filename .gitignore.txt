@@ -1,0 +1,63 @@
+# =========================
+# Python / FastAPI Project
+# =========================
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Compiled
+*.so
+*.dylib
+
+# Build / distribution folders
+build/
+dist/
+*.egg-info/
+
+# Environment variables
+.env
+.env.*
+*.env
+
+# IDE / Editor settings
+.vscode/
+.idea/
+*.swp
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# SQLite database (varsa)
+*.sqlite
+*.db
+
+# PyInstaller / exe output
+*.spec
+output/
+dist/
+build/
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Test coverage
+htmlcov/
+.coverage
+.pytest_cache/
+
+# Local configs
+config.local.json
+config.yaml
