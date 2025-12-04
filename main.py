@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException, status, Depends, Query
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
 from datetime import datetime
+from sqlmodel import Session, select
 import os
 
 
