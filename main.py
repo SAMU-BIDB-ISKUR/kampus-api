@@ -8,12 +8,137 @@ import os
 
 
 
+from psycopg2.pool import SimpleConnectionPool
+from contextlib import asynccontextmanager
+
 # Global Bağlantı Havuzu
 pool: Optional[SimpleConnectionPool] = None
 
 
 
 # ==================== PYDANTIC MODELS (DTO) ====================
+
+class CampusCreateDTO(BaseModel):
+    name: str
+    city: str
+    address: Optional[str] = None
+    established_year: Optional[int] = None
+    total_area: Optional[float] = None
+    student_capacity: Optional[int] = None
+
+class CampusUpdateDTO(BaseModel):
+    name: Optional[str] = None
+    city: Optional[str] = None
+    address: Optional[str] = None
+    established_year: Optional[int] = None
+    total_area: Optional[float] = None
+    student_capacity: Optional[int] = None
+
+class CampusResponseDTO(CampusCreateDTO):
+    id: int
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+class BuildingCreateDTO(BaseModel):
+    campus_id: int
+    name: str
+    type: Optional[str] = None
+    floor_count: Optional[int] = None
+    construction_year: Optional[int] = None
+    gross_area: Optional[float] = None
+
+class BuildingUpdateDTO(BaseModel):
+    name: Optional[str] = None
+    type: Optional[str] = None
+    floor_count: Optional[int] = None
+    construction_year: Optional[int] = None
+    gross_area: Optional[float] = None
+
+class BuildingResponseDTO(BuildingCreateDTO):
+    id: int
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+class CampusRepository:
+    def __init__(self, conn):
+        self.conn = conn
+    
+    def create(self, campus_data: dict) -> dict:
+        cur = self.conn.cursor()
+        try:
+            query = """
+            INSERT INTO campuses (name, city, address, established_year, total_area, student_capacity)
+            VALUES (%(name)s, %(city)s, %(address)s, %(established_year)s, %(total_area)s, %(student_capacity)s)
+            RETURNING *;
+            """
+            cur.execute(query, campus_data)
+            campus = cur.fetchone()
+            self.conn.commit()
+            return dict(campus)
+        except Exception as e:
+            self.conn.rollback()
+            raise Exception(f"Veritabanı kampüs oluşturma hatası: {str(e)}")
+        finally:
+            cur.close()
+
+    def find_all(self, city: Optional[str] = None) -> List[dict]:
+        cur = self.conn.cursor()
+        try:
+            if city:
+                cur.execute('SELECT * FROM campuses WHERE city = %s ORDER BY id', (city,))
+            else:
+                cur.execute('SELECT * FROM campuses ORDER BY id')
+            campuses = cur.fetchall()
+            return [dict(campus) for campus in campuses]
+        except Exception as e:
+            raise Exception(f"Veritabanı kampüs listeleme hatası: {str(e)}")
+        finally:
+            cur.close()
+
+    def find_by_id(self, campus_id: int) -> Optional[dict]:
+        cur = self.conn.cursor()
+        try:
+            cur.execute('SELECT * FROM campuses WHERE id = %s', (campus_id,))
+            campus = cur.fetchone()
+            return dict(campus) if campus else None
+        except Exception as e:
+            raise Exception(f"Veritabanı kampüs getirme hatası: {str(e)}")
+        finally:
+            cur.close()
+
+    def update(self, campus_id: int, campus_data: dict) -> Optional[dict]:
+        cur = self.conn.cursor()
+        try:
+            set_clause = ", ".join([f"{key} = %({key})s" for key in campus_data.keys()])
+            query = f"""
+            UPDATE campuses 
+            SET {set_clause}, updated_at = CURRENT_TIMESTAMP
+            WHERE id = %(id)s
+            RETURNING *;
+            """
+            campus_data['id'] = campus_id
+            cur.execute(query, campus_data)
+            campus = cur.fetchone()
+            self.conn.commit()
+            return dict(campus) if campus else None
+        except Exception as e:
+            self.conn.rollback()
+            raise Exception(f"Veritabanı kampüs güncelleme hatası: {str(e)}")
+        finally:
+            cur.close()
+
+    def delete(self, campus_id: int) -> Optional[dict]:
+        cur = self.conn.cursor()
+        try:
+            cur.execute('DELETE FROM campuses WHERE id = %s RETURNING *', (campus_id,))
+            campus = cur.fetchone()
+            self.conn.commit()
+            return dict(campus) if campus else None
+        except Exception as e:
+            self.conn.rollback()
+            raise Exception(f"Veritabanı kampüs silme hatası: {str(e)}")
+        finally:
+            cur.close()
 
 
 
@@ -233,7 +358,75 @@ class BuildingService:
 
 # ==================== FASTAPI APP VE BAĞIMLILIKLAR ====================
 
+
+# ==================== DATABASE HELPERS ====================
+
+def initialize_db_pool():
+    global pool
+    # Use environment variables or default for testing
+    dsn = os.getenv("DATABASE_URL", "dbname=postgres user=postgres password=postgres host=localhost")
+    try:
+        pool = SimpleConnectionPool(minconn=1, maxconn=10, dsn=dsn)
+        print("Database pool initialized.")
+    except Exception as e:
+        print(f"Error initializing database pool: {e}")
+
+def close_db_pool():
+    global pool
+    if pool:
+        pool.closeall()
+        print("Database pool closed.")
+
+def get_db_connection():
+    if not pool:
+        raise Exception("Database pool not initialized")
+    conn = pool.getconn()
+    try:
+        yield conn
+    finally:
+        pool.putconn(conn)
+
+def create_tables():
+    if not pool:
+        return
+    conn = pool.getconn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS campuses (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                city VARCHAR(100) NOT NULL,
+                address TEXT,
+                established_year INTEGER,
+                total_area DECIMAL(10, 2),
+                student_capacity INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS buildings (
+                id SERIAL PRIMARY KEY,
+                campus_id INTEGER REFERENCES campuses(id) ON DELETE CASCADE,
+                name VARCHAR(255) NOT NULL,
+                type VARCHAR(50),
+                floor_count INTEGER,
+                construction_year INTEGER,
+                gross_area DECIMAL(10, 2),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.commit()
+        cur.close()
+    except Exception as e:
+        print(f"Error creating tables: {e}")
+    finally:
+        pool.putconn(conn)
+
 @asynccontextmanager
+
 async def lifespan(app: FastAPI):
     # Startup: Bağlantı havuzunu başlat ve tabloları oluştur
     initialize_db_pool()
